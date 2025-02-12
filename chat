@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anonymous Chat</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h2>Anonymous Chat</h2>
+    <div id="chatBox"></div>
+    <input type="text" id="messageInput" placeholder="Type a message...">
+    <button onclick="sendMessage()">Send</button>
+    <script src="script.js"></script>
+</body>
+</html>
+
+/* style.css */
+body { font-family: Arial, sans-serif; text-align: center; }
+#chatBox { width: 80%; height: 300px; border: 1px solid #ccc; margin: auto; overflow-y: scroll; padding: 10px; }
+#messageInput { width: 70%; padding: 10px; }
+button { padding: 10px; }
+
+/* script.js */
+const socket = new WebSocket("wss://your-websocket-server.com");
+const chatBox = document.getElementById("chatBox");
+const messageInput = document.getElementById("messageInput");
+
+socket.onopen = () => {
+    chatBox.innerHTML = "<p>Waiting for someone to join...</p>";
+};
+
+socket.onmessage = (event) => {
+    chatBox.innerHTML += `<p>${event.data}</p>`;
+};
+
+socket.onclose = () => {
+    chatBox.innerHTML += "<p>Chat disconnected.</p>";
+};
+
+function sendMessage() {
+    const message = messageInput.value;
+    if (message.trim() !== "") {
+        socket.send(message);
+        chatBox.innerHTML += `<p><b>You:</b> ${message}</p>`;
+        messageInput.value = "";
+    }
+}
+
+/* server.js */
+const WebSocket = require("ws");
+const server = new WebSocket.Server({ port: 8080 });
+
+let waitingUser = null;
+
+server.on("connection", (socket) => {
+    if (waitingUser) {
+        socket.partner = waitingUser;
+        waitingUser.partner = socket;
+        waitingUser.send("Connected to a stranger!");
+        socket.send("Connected to a stranger!");
+        waitingUser = null;
+    } else {
+        waitingUser = socket;
+        socket.send("Waiting for someone to join...");
+    }
+
+    socket.on("message", (message) => {
+        if (socket.partner) {
+            socket.partner.send(message);
+        }
+    });
+
+    socket.on("close", () => {
+        if (socket.partner) {
+            socket.partner.send("The stranger has left.");
+            socket.partner.partner = null;
+        }
+        if (waitingUser === socket) {
+            waitingUser = null;
+        }
+    });
+});
+
+console.log("WebSocket server running on ws://localhost:8080");
